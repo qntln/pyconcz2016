@@ -1,0 +1,9 @@
+digraph pubsub {
+
+	"Publisher 1" -> Hub [ label = "(MarketData, XETR, Trades)" ]
+	"Publisher 2" -> Hub [ label = "(MarketData, XVIE, Trades)" ]
+
+	Hub -> "Subscriber 1" [ label = "(MarketData, XETR, Trades)" ]
+	Hub -> "Subscriber 2" [ label = "(MarketData, *, Trades)" ]
+
+}

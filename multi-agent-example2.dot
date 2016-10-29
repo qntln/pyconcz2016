@@ -1,0 +1,19 @@
+digraph multi_agent_example2 {
+
+	"Input data processor" -> "Model"
+	"Model" -> "Neural network"
+	"Neural network" -> "Trading strategy 1"
+	"Trading strategy 1" -> "Order executor"
+
+	"Model" -> "GUI"
+	"GUI" -> "Human"
+	"Human" -> "Order executor"
+
+	"Model" -> "Trading strategy 2"
+	"Trading strategy 2" -> "Order executor"
+
+	"Order executor" -> "Reporting"
+
+	"Input data processor" -> "Alternative model"
+	"Alternative model" -> "Trading strategy 3"
+}

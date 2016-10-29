@@ -1,0 +1,7 @@
+digraph multi_agent_example {
+
+	"Input data processor" -> "Model" [ label = "market data diff" ]
+	"Model" -> "Neural network" [ label = "market data snapshot" ]
+	"Neural network" -> "Trading strategy" [ label = "prediction" ]
+	"Trading strategy" -> "Order executor" [ label = "buy/sell order" ]
+}

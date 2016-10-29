@@ -12,6 +12,15 @@
 		<!-- Theme used for syntax highlighting of code -->
 		<link rel="stylesheet" href="lib/css/zenburn.css">
 
+		<style>
+			a.twitter {
+				color: #000;
+				padding-left: 45px;
+				background: url(img/twitter.svg) 0 50% no-repeat;
+				background-size: 40px;
+			}
+		</style>
+
 		<!-- Printing and PDF exports -->
 		<script>
 			var link = document.createElement( 'link' );
@@ -31,6 +40,516 @@
 					<h3><span>October 29, 2016</span></h3>
 				</section>
 
+<!-- 1. Intro -->
+
+				<section data-background-image="img/wallpaper.svg">
+					<aside class="notes">
+					</aside>
+				</section>
+
+				<section>
+					<h2>Hi, I am Vita.</h2>
+					I am a freelancer specializing in difficult, mathy problems.
+
+					<aside class="notes">
+						I really like to travel because it keeps pushing me out of my comfort zone, and teaches me things.
+						I think Python is the best language in the world.
+					</aside>
+				</section>
+
+				<section>
+					<h2 class="logo-heading"><img src="img/logo-positive-horizontal.svg" alt="Quantlane"></h2>
+					<ul>
+						<li class="fragment">We develop a stock trading platform and strategies.</li>
+						<li class="fragment">Small team, lean principles.</li>
+						<li class="fragment">All back-end code is Python 3.5.</li>
+						<li class="fragment">We also like numpy, ReactJS, Redis, Kafka, PostgreSQL, TensorFlow, &hellip;</li>
+					</ul>
+
+					<aside class="notes">
+						I am here to represent Quantlane.
+						We started out as a part of an investment bank but we're in the process of spinning off under our own brand.
+					</aside>
+				</section>
+
+<!-- 2. Outline -->
+
+				<section>
+					<h2>This talk</h2>
+					<ul>
+						<li class="fragment">What is a trading platform?</li>
+						<li class="fragment">Useful tricks &amp; tools for async Python and performance.</li>
+					</ul>
+
+					<aside class="notes">
+						I'm hoping you can use these tools yourself. Even if you're not trading.
+						Don't try trading at home, unless you <em>really</em> know what you're doing.
+					</aside>
+				</section>
+
+<!-- 3. What is a trading platform -->
+
+				<section>
+					A trading platform is a
+					<h2>low-latency event-driven<br>multi-agent system</h2>
+
+					<aside class="notes">
+						So that's a lot to unpack, but don't worry, it's quite simple.
+					</aside>
+				</section>
+
+				<section>
+					<h2>Low-latency</h2>
+					<ul>
+						<li class="fragment">Newly arrived data should be processed in less than 50 milliseconds</li>
+						<li class="fragment">Decisions should be made in less than 250 milliseconds</li>
+					</ul>
+
+					<aside class="notes">
+						We receive a lot of streamed data from the stock exchanges, and compute our own statistics and predictions on it.
+						Then we might want to react to something that happens in the market and say "okay, we want to buy X shares right now".
+					</aside>
+				</section>
+
+				<section>
+					<h2>Event-driven</h2>
+					<ul>
+						<li class="fragment">A lot of code is just waiting for things to happen:
+							<ul>
+								<li class="fragment">Data from stock exchanges</li>
+								<li class="fragment">Our computations</li>
+								<li class="fragment">User input</li>
+							</ul>
+						</li>
+					</ul>
+
+					<aside class="notes">
+						The platform runs all the time, it's not a request-response server, like a web app.
+						A simple example is receiving info that somebody has just bought X shares of stock Y, and just displaying it in the GUI.
+						Or user actions in the GUI.
+					</aside>
+				</section>
+
+				<section>
+					<h2>Multi-agent</h2>
+					<ul>
+						<li class="fragment">Many decoupled components.</li>
+						<li class="fragment">Functionality is spread across different modules &hellip;</li>
+						<li class="fragment">&hellip; or even processes</li>
+					</ul>
+
+					<aside class="notes">
+						You can keep latency-critical components in the main platform process and move slower
+						components to separate processes and systems. This also distributes development effort.
+					</aside>
+				</section>
+
+				<section>
+					<img src="img/multi-agent-example1.svg" class="borderless" alt="">
+					<aside class="notes">
+						All the arrows here mean loose coupling. Not function calls.
+						In our case, it's a publish-subscribe system.
+					</aside>
+				</section>
+
+				<section>
+					<img src="img/multi-agent-example2.svg" class="borderless" alt="">
+					<aside class="notes">
+						The beauty of this design is that you can <em>grow</em> it sort of like a computation graph.
+						To add a new component you don't have to touch others.
+						Funny exception: automated trading strategies. You don't want two parts of your system
+						trying to out-trade each other. This actually happened to us.
+					</aside>
+				</section>
+
+<!-- 4. asyncio 101 -->
+
+				<section>
+					<h2>asyncio 101</h2>
+					<ul>
+						<li class="fragment">Parallel programs are easy to reason about.</li>
+						<li class="fragment">Coroutines use <code>await</code> to suspend themselves until they receive input.</li>
+						<li class="fragment">Everything runs in one thread by default.</li>
+					</ul>
+
+					<aside class="notes">
+						Show of hands: who here has used asyncio before?
+					</aside>
+				</section>
+
+				<section>
+					<pre><code class="python" data-trim data-noescape>
+class InputDataProcessor:
+    async def run(self):
+        while True:
+            data = await self._reader.read()  # Read from socket
+            publish(parse(data))  # Send to internal pubsub
+					</code></pre>
+					<pre class="fragment"><code class="python" data-trim data-noescape>
+class Model:
+    async def run(self):
+        while True:
+            incremental_update = await consume()  # Read from pubsub
+            state_snapshot = self._process(incremental_update)
+            publish(state_snapshot)  # Send state to internal pubsub
+					</code></pre>
+					<aside class="notes">
+					</aside>
+				</section>
+
+				<section>
+					<pre><code class="python" data-trim data-noescape>
+class UserInterfaceServer:
+   async def run(self):
+       await asyncio.wait([self._handle_input(), self._render()])
+
+   async def _handle_input(self):
+       while True:
+           data = await self._websocket.recv() # Read from WebSocket
+           publish(parse(data))  # Send input to internal pubsub
+
+   async def _render(self):
+       while True:
+           state = get_model_state()
+           await self._websocket.send(encode(state))
+           await asyncio.sleep(0.25)
+					</code></pre>
+
+					<aside class="notes">
+					</aside>
+				</section>
+
+
+<!-- 5. pubsub -->
+
+				<section>
+					<h2>asyncio publish-subscribe</h2>
+					<ul>
+						<li class="fragment">Many components produce data.</li>
+						<li class="fragment">Many components consume data.</li>
+						<li class="fragment">All messages are routed through a central hub.</li>
+					</ul>
+
+					<aside class="notes">
+					</aside>
+				</section>
+
+				<section>
+					<img src="img/pubsub.svg" class="borderless" style="width: 80%" alt="">
+					<aside class="notes">
+						Notice those data identifiers. We call them keys.
+						They are like namespaces and support wildcards.
+					</aside>
+				</section>
+
+				<section>
+					<h2>Hub</h2>
+					<pre><code class="python" data-trim data-noescape>
+hub = pubsub.Hub()
+					</code></pre>
+					<h2>Publisher</h2>
+					<pre><code class="python" data-trim data-noescape>
+publisher1 = pubsub.Publisher(hub, ('some', 'namespace'))
+publisher1.publish({'data': 42})
+					</code></pre>
+
+					<aside class="notes">
+						The hub instance is the only global object that has to be passed around.
+					</aside>
+				</section>
+
+				<section>
+					<h2>Subscriber</h2>
+					<pre><code class="python" data-trim data-noescape>
+subscriber1 = pubsub.Subscriber(hub, 'subscriber1')
+subscriber1.subscribe(('some', '*'))
+
+while True:
+    key, payload = await subscriber1.consume()
+    print(key)      # ('some', 'namespace')
+    print(payload)  # {'data': 42}
+					</code></pre>
+					<aside class="notes">
+						This is a very simple example. There's a callback-based API as well.
+					</aside>
+				</section>
+
+				<section>
+					<h2><a href="https://github.com/qntln/ql-pubsub">github.com/qntln/ql-pubsub</a></h2>
+					<h4><a href="https://twitter.com/quantlane" class="twitter">@quantlane</a></h4>
+					<aside class="notes">
+						Coming in November!
+					</aside>
+				</section>
+
+<!-- 6. statsd -->
+
+				<section>
+					<h2>Tracking metrics in StatsD</h2>
+					<ul>
+						<li class="fragment">Application code sends timings and counters via UDP.</li>
+						<li class="fragment">StatsD aggregates the raw data and stores it in a backend.</li>
+						<li class="fragment">Very simple to track dozens of metrics.</li>
+					</ul>
+
+					<aside class="notes">
+					</aside>
+				</section>
+
+				<section>
+					<p>Example from <a href="http://statsd.readthedocs.io">statsd.readthedocs.io</a>:</p>
+					<pre><code class="python" data-trim data-noescape>
+import statsd
+c = statsd.StatsClient('localhost', 8125)
+
+c.incr('foo')  # Increment the 'foo' counter.
+c.timing('stats.timed', 320)  # Record a 320ms 'stats.timed'.
+					</code></pre>
+					<aside class="notes">
+						It is very simple and you should be doing it.
+						I've done this with Django middleware, Celery task hooks...
+					</aside>
+				</section>
+
+				<section  data-background-color="#1f1f1f">
+					<img src="img/statsd.png" class="borderless" alt="">
+					<aside class="notes">
+						Usage statistics of a data structure that we persist to Redis.
+					</aside>
+				</section>
+
+				<section>
+					<h2><a href="https://github.com/qntln/fastatsd">github.com/qntln/fastatsd</a></h2>
+					<h4><a href="https://twitter.com/quantlane" class="twitter">@quantlane</a></h4>
+					<aside class="notes">
+						And finally...
+						When profiling we found that even simple UDP sends were taking significant time.
+						We made a drop-in replacement that does it in a worker thread.
+						Coming in November!
+					</aside>
+				</section>
+
+
+<!-- 7. aiodebug -->
+
+				<section>
+					<h2>aiodebug</h2>
+					<ul>
+						<li class="fragment">Small library for monitoring and testing asyncio programs.</li>
+						<li class="fragment">Always on in production.</li>
+					</ul>
+				</section>
+
+
+				<section>
+					<h2>Log warnings when callbacks block the event loop for longer than 50ms</h2>
+					<pre><code class="python" data-trim>
+aiodebug.log_slow_callbacks.enable(0.05)
+					</code></pre>
+					<small><code>Executing &lt;Task pending coro=&lt;foo() running at /home/.../foo.py:37&gt; wait_for=&lt;Future pending cb=[Task._wakeup()]&gt;&gt; took 0.069 seconds</code></small>
+
+					<aside class="notes">
+						asyncio in debug mode also logs slow callbacks. But you don't want full-on debug mode in production.
+					</aside>
+				</section>
+
+
+				<section>
+					<h2>Speed up or slow down time in the event loop</h2>
+					<pre><code class="python" data-trim data-noescape>
+loop = aiodebug.testing.time_dilated_loop.TimeDilatedLoop()
+asyncio.set_event_loop(loop)
+
+loop.time_dilation = 3
+await asyncio.sleep(1) # Takes 0.333s of real time
+
+loop.time_dilation = 0.1
+await asyncio.sleep(1) # Takes 10s of real time
+					</code></pre>
+
+					<aside class="notes">
+						Great for testing real-time code on replayed historical inputs.
+					</aside>
+				</section>
+
+
+				<section>
+					<h2>Track event loop lags in StatsD</h2>
+					<pre><code class="python" data-trim data-noescape>
+aiodebug.monitor_loop_lag.enable(statsd_client)
+					</code></pre>
+
+					<aside class="notes">
+						How much are scheduled calls delayed?
+					</aside>
+				</section>
+
+
+				<section data-background-color="#161616">
+					<img src="img/loop-lags.png" class="borderless" alt="">
+					<aside class="notes">
+						Something we've learned about timings and lags: they are not normally distributed,
+						so averages don't quite capture them. We track several quantiles.
+					</aside>
+				</section>
+
+
+				<section>
+					<h2><a href="https://github.com/qntln/aiodebug">github.com/qntln/aiodebug</a></h2>
+					<h4><a href="https://twitter.com/quantlane" class="twitter">@quantlane</a></h4>
+					<aside class="notes">
+						Coming in November!
+					</aside>
+				</section>
+
+<!-- 8. logwood -->
+
+				<section>
+					<h2>Making logging faster</h2>
+					<ul>
+						<li class="fragment">The standard <code>logging</code> module is feature-rich but slow.</li>
+						<li class="fragment">We replaced it with a bare-bones logging library with almost no features.</li>
+					</ul>
+
+					<aside class="notes">
+						We generate ~20GB of app logs a day.
+						We can no longer see logging overhead in profiling output.
+					</aside>
+				</section>
+
+
+				<section>
+					<h2></h2>
+					<pre><code class="python" data-trim data-noescape>
+import logwood
+from logwood.handlers.stderr import ColoredStderrHandler
+
+logwood.basic_config(
+    level = logwood.INFO,
+    handlers = [ColoredStderrHandler()]
+)
+
+logger = logwood.get_logger('LoggerName')
+logger.info('Just FYI')
+logger.warning('Six times seven is {:d}.', 42)
+					</code></pre>
+					<small><code>[1477469095.001102][hostname][script.py][LoggerName][INFO] Just FYI<br>
+					<span style="color: #bb0">[1477469095.001147][hostname][script.py][LoggerName][WARNING]
+					Six times seven is 42.</span></code></small>
+					<aside class="notes">
+					</aside>
+				</section>
+
+
+				<section>
+					<h2><a href="https://github.com/qntln/logwood">github.com/qntln/logwood</a></h2>
+					<h4><a href="https://twitter.com/quantlane" class="twitter">@quantlane</a></h4>
+					<aside class="notes">
+						Coming in November!
+					</aside>
+				</section>
+
+<!-- 9. statprof -->
+
+				<section>
+					<h2>Profiling in production</h2>
+					<ul>
+						<li class="fragment">Profiling is essential for optimization.</li>
+						<li class="fragment">The standard Python profiler <code>cProfile</code> is great but slows down the profiled program.</li>
+						<li class="fragment">In complex systems, production load is difficult to simulate.</li>
+					</ul>
+
+					<aside class="notes">
+						cProfile overhead is around 20%, because it's a <em>tracing</em> profiler.
+						We need to profile real, production systems.
+					</aside>
+				</section>
+
+				<section>
+					<h2>Statistical profiling</h2>
+					<ul>
+						<li class="fragment"><code>statprof</code> is a statistical profiler: instead of tracing every function call, it samples the stack N times per second</li>
+						<li class="fragment">Less accurate, but lightweight.</li>
+					</ul>
+
+					<aside class="notes">
+					</aside>
+				</section>
+
+
+				<section>
+					<h2></h2>
+					<pre><code class="python" data-trim data-noescape>
+import statprof
+statprof.start()
+
+json.dump(some_data, file) # Your program
+
+statprof.stop()
+statprof.display()
+					</code></pre>
+					<pre class="borderless"><code class="nohighlight">
+ %   cumulative      self
+time    seconds   seconds  name
+65.31      0.06      0.06  .../json/__init__.py:179:dump
+ 8.16      0.03      0.01  .../json/encoder.py:324:_iterencode_list
+ 8.16      0.01      0.01  .../json/encoder.py:392:_iterencode_dict
+...
+					</code></pre>
+					<aside class="notes">
+					</aside>
+				</section>
+
+
+				<section>
+					Tip: use <code>statprof-smarkets</code> rather than the unmaintained <code>statprof</code>.
+					<aside class="notes">
+						The fork works in modern Python.
+					</aside>
+				</section>
+
+				<section>
+					<h2>Continuous profiling</h2>
+					<ul>
+						<li class="fragment">Running statprof ad-hoc is nice, but it's a lot of manual work.</li>
+						<li class="fragment">Can we automate the collection of profiles?</li>
+						<li class="fragment">Can we automate the analysis as well?</li>
+					</ul>
+
+					<aside class="notes">
+						One of our principles is automation.
+						We're planning to build a whole automated system: embedded staprof servers in every
+						process and a centralized collector &amp; analyzer.
+					</aside>
+				</section>
+
+<!-- 10. Summary -->
+
+				<section data-background-image="img/wallpaper.svg"></section>
+
+				<section>
+					<h2>Takeaways &ndash; asyncio</h2>
+					<ol>
+						<li class="fragment">Event-driven architecture promotes decoupling.</li>
+						<li class="fragment">asyncio makes it easy to run many separate components in one process &hellip;</li>
+						<li class="fragment">&hellip; especially when you add a simple publish-subscribe system.</li>
+					</ol>
+					<aside class="notes">
+					</aside>
+				</section>
+
+				<section>
+					<h2>Takeaways &ndash; performance</h2>
+					<ol start="4">
+						<li class="fragment">Tracking application metrics helps with monitoring and performance troubleshooting.</li>
+						<li class="fragment">Sometimes it is right to reinvent the wheel (such as logging).</li>
+						<li class="fragment">Profiling live systems is crucial, but difficult &hellip; for now.</li>
+					</ol>
+					<aside class="notes">
+						aiodebug tracks asyncio internals.
+						We also reinvented our own Enum and date parsing.
+					</aside>
+				</section>
 
 				<section class="thankyou-slide" data-background-color="#000000">
 					<img class="logo" src="img/logo-negative.svg" alt="Quantlane">
@@ -42,6 +561,9 @@
 					<h2>
 						<a href="https://twitter.com/quantlane" class="twitter-link">twitter.com/quantlane</a>
 					</h2>
+					<aside class="notes">
+						Happy to take questions now.
+					</aside>
 				</section>
 			</div>
 		</div>
